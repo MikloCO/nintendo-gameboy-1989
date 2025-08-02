@@ -126,13 +126,7 @@ function updateGridTexture() {
                 gridData[index + 2] = 255;                              // B: full value for active blocks
                 gridData[index + 3] = 255;                             // A: full opacity
                 
-                if (cell.type > 0) {
-                    console.log(`Grid texture at (${x},${y}):`, {
-                        r: gridData[index],
-                        g: gridData[index + 1],
-                        b: gridData[index + 2]
-                    });
-                }
+                // Update grid texture for active cells
             } else {
                 gridData[index] = 0;
                 gridData[index + 1] = 0;
@@ -162,22 +156,303 @@ const tetrisMaterial = new ShaderMaterial({
 });
 tetrisMaterial.uniforms.u_rotation = { value: 0 };
 
+// Check if a rotation would cause wall collision
+function isValidRotation(shapeId, offsetX, newRotation) {
+    const shape = allShapes[shapeId];
+    const rotation = Math.floor(newRotation / 90) % 4;
+    
+    // Define where the walls are - accounting for the 1 unit width of each wall
+    const wallWidth = 1;
+    const playableLeftEdge = wallWidth; // First playable column (after left wall)
+    const playableRightEdge = gridWidth - wallWidth; // Last playable column (before right wall)
+    
+    // Track if any cell would be at the edge after rotation
+    let wouldBeAtLeftEdge = false;
+    let wouldBeAtRightEdge = false;
+    
+    // Track if there's any wall intersection
+    let hasIntersection = false;
+    let intersectionType = "";
+    
+    // Create a 2D grid to visualize the shape and walls
+    const visualGrid = [];
+    for (let y = 0; y < 4; y++) {
+        visualGrid[y] = [];
+        for (let x = 0; x < gridWidth + 2; x++) {
+            // Set wall positions
+            if (x === 0 || x === gridWidth + 1) {
+                visualGrid[y][x] = '|'; // Wall character
+            } else {
+                visualGrid[y][x] = ' '; // Empty space
+            }
+        }
+    }
+    
+    // We need to check each position in the 4x4 grid where shape cells will be after rotation
+    for (let fy = 0; fy < 4; fy++) {
+        for (let fx = 0; fx < 4; fx++) {
+            // These coordinates match what the shader does with grid position
+            
+            // Apply inverse rotation to find which cell from the original shape would end up here
+            let rx = fx, ry = fy;
+            
+            // EXACT MATCH to shader rotation in tetris-fragment.glsl
+            if (rotation === 1) { // 90° clockwise in shader
+                rx = fy; 
+                ry = 3 - fx;
+            } else if (rotation === 2) { // 180°
+                rx = 3 - fx;
+                ry = 3 - fy;
+            } else if (rotation === 3) { // 270° clockwise in shader
+                rx = 3 - fy;
+                ry = fx;
+            }
+            
+            // Check if there's a cell in the shape at this inverse-rotated position
+            const originalCellValue = (rx >= 0 && rx < 4 && ry >= 0 && ry < 4) 
+                ? shape[ry * 4 + rx] 
+                : 0;
+                
+            // Check for both 9 and 1 as filled cell values
+            if (originalCellValue === 0) continue; // No cell here after rotation
+            
+            // This position will have a cell after rotation, check if it would be outside grid
+            const gx = offsetX + fx;
+            
+            // Update the visual grid with the cell position
+            if (gx >= 0 && gx < gridWidth && fy < 4) {
+                visualGrid[fy][gx + 1] = 'X'; // +1 to account for the left wall
+            }
+            
+            // Wall collision check with detailed information
+            if (gx < playableLeftEdge) {
+                console.log(`INTERSECTED LEFT WALL: Cell would be at grid x=${gx}`);
+                hasIntersection = true;
+                intersectionType = "LEFT WALL";
+            } else if (gx >= playableRightEdge) {
+                console.log(`INTERSECTED RIGHT WALL: Cell would be at grid x=${gx}`);
+                hasIntersection = true;
+                intersectionType = "RIGHT WALL";
+            } else if (gx === playableLeftEdge) {
+                // Block would be right next to the left wall edge after rotation
+                console.log(`EDGE DETECTION: Block would be at LEFT EDGE after rotation - grid x=${gx}`);
+                wouldBeAtLeftEdge = true;
+            } else if (gx === playableRightEdge - 1) {
+                // Block would be right next to the right wall edge after rotation
+                console.log(`EDGE DETECTION: Block would be at RIGHT EDGE after rotation - grid x=${gx}`);
+                wouldBeAtRightEdge = true;
+            }
+        }
+    }
+    
+    // Print visual representation of the shape and walls if there's an intersection
+    if (hasIntersection) {
+        console.log(`ROTATION BLOCKED: Intersection with ${intersectionType} detected`);
+        console.log("Visual grid representation:");
+        visualGrid.forEach(row => console.log(row.join('')));
+        return false;
+    }
+    
+    // Check if the piece would be at an edge after rotation
+    if (wouldBeAtLeftEdge) {
+        console.log("ROTATION BLOCKED: Would place piece at LEFT EDGE");
+        return false;
+    }
+    
+    if (wouldBeAtRightEdge) {
+        console.log("ROTATION BLOCKED: Would place piece at RIGHT EDGE");
+        return false;
+    }
+    
+    // No collisions or edge placements detected
+    return true;
+}
+
+// Function to check if a piece is at the edge of the grid
+function checkPieceAtEdge() {
+    const shapeId = tetrisMaterial.uniforms.u_shapeId.value;
+    const offsetX = tetrisMaterial.uniforms.u_offsetX.value;
+    const rotation = Math.floor(tetrisMaterial.uniforms.u_rotation.value / 90) % 4;
+    const shape = allShapes[shapeId];
+    
+    // Define wall width constant
+    const wallWidth = 1;
+    const playableLeftEdge = wallWidth;
+    const playableRightEdge = gridWidth - wallWidth;
+    
+    console.log(`EDGE CHECK: Shape ${shapeId}, rotation ${rotation}°, offset ${offsetX}`);
+    
+    // Track if any cell is at the edge
+    let atLeftEdge = false;
+    let atRightEdge = false;
+    
+    // Check each position in the 4x4 grid
+    for (let fy = 0; fy < 4; fy++) {
+        for (let fx = 0; fx < 4; fx++) {
+            // Apply inverse rotation to find which cell from the original shape would end up here
+            let rx = fx, ry = fy;
+            
+            // EXACT MATCH to shader rotation in tetris-fragment.glsl
+            if (rotation === 1) { // 90° clockwise
+                rx = fy; 
+                ry = 3 - fx;
+            } else if (rotation === 2) { // 180°
+                rx = 3 - fx;
+                ry = 3 - fy;
+            } else if (rotation === 3) { // 270° clockwise
+                rx = 3 - fy;
+                ry = fx;
+            }
+            
+            // Check if there's a cell in the shape at this inverse-rotated position
+            const originalCellValue = (rx >= 0 && rx < 4 && ry >= 0 && ry < 4) 
+                ? shape[ry * 4 + rx] 
+                : 0;
+            
+            if (shapeId === 1) { // Specifically debugging the cube (OTermino)
+                console.log(`Cube check: position (${fx},${fy}) maps to original (${rx},${ry}) with value ${originalCellValue}`);
+            }
+                
+            if (originalCellValue === 0) continue; // No cell here for any shape
+            // Both values 1 and 9 are used to indicate filled cells in different shapes
+            
+            // Calculate grid position
+            const gx = offsetX + fx;
+            
+            // Check if at edge
+            if (gx === playableLeftEdge) {
+                atLeftEdge = true;
+                console.log(`EDGE ALERT: Shape ${shapeId}, rot ${rotation}° - Block at LEFT EDGE (${fx},${fy}) -> grid x=${gx}`);
+            } else if (gx === playableRightEdge - 1) {
+                atRightEdge = true;
+                console.log(`EDGE ALERT: Shape ${shapeId}, rot ${rotation}° - Block at RIGHT EDGE (${fx},${fy}) -> grid x=${gx}`);
+            }
+        }
+    }
+    
+    // Print summary with shape and rotation info
+    if (atLeftEdge) {
+        console.log(`!!! PIECE IS AT LEFT EDGE OF GRID !!! Shape ${shapeId}, Rotation ${rotation}°`);
+    }
+    if (atRightEdge) {
+        console.log(`!!! PIECE IS AT RIGHT EDGE OF GRID !!! Shape ${shapeId}, Rotation ${rotation}°`);
+    }
+    
+    return { atLeftEdge, atRightEdge };
+}
+
+// Check if moving in a direction would cause a collision
+function isValidMove(shapeId, offsetX, rotation) {
+    const shape = allShapes[shapeId];
+    rotation = Math.floor(rotation / 90) % 4;
+    
+    // Define the playable grid area considering 1-unit walls on each side
+    const wallWidth = 1; // Each wall is 1 unit wide
+    const playableLeftEdge = wallWidth; // First playable column after left wall
+    const playableRightEdge = gridWidth - wallWidth; // Last playable column before right wall
+    
+    // Check each position in the 4x4 grid
+    for (let fy = 0; fy < 4; fy++) {
+        for (let fx = 0; fx < 4; fx++) {
+            // Apply inverse rotation to find which cell from the original shape would end up here
+            let rx = fx, ry = fy;
+            
+            // EXACT MATCH to shader rotation in tetris-fragment.glsl
+            if (rotation === 1) { // 90° clockwise
+                rx = fy; 
+                ry = 3 - fx;
+            } else if (rotation === 2) { // 180°
+                rx = 3 - fx;
+                ry = 3 - fy;
+            } else if (rotation === 3) { // 270° clockwise
+                rx = 3 - fy;
+                ry = fx;
+            }
+            
+            // Check if there's a cell in the shape at this inverse-rotated position
+            const originalCellValue = (rx >= 0 && rx < 4 && ry >= 0 && ry < 4) 
+                ? shape[ry * 4 + rx] 
+                : 0;
+                
+            // Check for both 9 and 1 as filled cell values (some shapes use 1, others use 9)
+            if (originalCellValue === 0) continue; // No cell here for this shape
+            
+            // Calculate grid position with the proposed offset
+            const gx = offsetX + fx;
+            
+            // Check if this would collide with walls or be outside the playable area
+            if (gx < playableLeftEdge || gx >= playableRightEdge) {
+                console.log(`Move blocked: position (${fx},${fy}) would hit wall or be outside grid at x=${gx}`);
+                return false;
+            }
+        }
+    }
+    
+    return true; // Move is valid
+}
+
 // Key movement
 window.addEventListener("keydown", (e) => {
+    const currentShapeId = tetrisMaterial.uniforms.u_shapeId.value;
+    const currentOffsetX = tetrisMaterial.uniforms.u_offsetX.value;
+    const currentRotation = tetrisMaterial.uniforms.u_rotation.value;
+    
+    // Define wall width constant to be consistent
+    const wallWidth = 1;
+    
     if (e.code === "ArrowRight") {
-        tetrisMaterial.uniforms.u_offsetX.value += 1;
+        const newOffsetX = currentOffsetX + 1;
+        // Check if moving right is valid using the new collision detection
+        if (isValidMove(currentShapeId, newOffsetX, currentRotation)) {
+            tetrisMaterial.uniforms.u_offsetX.value = newOffsetX;
+            // Check if piece is now at edge
+            checkPieceAtEdge();
+        }
     }
     if (e.code === "ArrowLeft") {
-        tetrisMaterial.uniforms.u_offsetX.value -= 1;
+        const newOffsetX = currentOffsetX - 1;
+        // Check if moving left is valid using the new collision detection
+        if (isValidMove(currentShapeId, newOffsetX, currentRotation)) {
+            tetrisMaterial.uniforms.u_offsetX.value = newOffsetX;
+            // Check if piece is now at edge
+            checkPieceAtEdge();
+        }
     }
     
     if (e.code === "ArrowUp") {
-        tetrisMaterial.uniforms.u_rotation.value = (tetrisMaterial.uniforms.u_rotation.value + 90) % 360;
+        const newRotation = (tetrisMaterial.uniforms.u_rotation.value + 90) % 360;
+        
+        console.log("Simulating clockwise rotation to check if valid...");
+        
+        // First simulate the rotation to see if it would be valid
+        // This is our "fake" rotation test
+        if (isValidRotation(currentShapeId, currentOffsetX, newRotation)) {
+            console.log("Rotation is safe - applying it");
+            tetrisMaterial.uniforms.u_rotation.value = newRotation;
+            // Check edge status after rotation just for logging
+            checkPieceAtEdge();
+        } else {
+            console.log("Rotation blocked - would cause wall collision or edge placement");
+            // Rotation was not applied
+        }
     }
     if (e.code === "ArrowDown") {
-        tetrisMaterial.uniforms.u_rotation.value = (tetrisMaterial.uniforms.u_rotation.value + 270) % 360;
+        const newRotation = (tetrisMaterial.uniforms.u_rotation.value + 270) % 360;
+        
+        console.log("Simulating counter-clockwise rotation to check if valid...");
+        
+        // First simulate the rotation to see if it would be valid
+        // This is our "fake" rotation test
+        if (isValidRotation(currentShapeId, currentOffsetX, newRotation)) {
+            console.log("Rotation is safe - applying it");
+            tetrisMaterial.uniforms.u_rotation.value = newRotation;
+            // Check edge status after rotation just for logging
+            checkPieceAtEdge();
+        } else {
+            console.log("Rotation blocked - would cause wall collision or edge placement");
+            // Rotation was not applied
+        }
     }
-    tetrisMaterial.uniforms.u_offsetX.value = Math.max(0, Math.min(10, tetrisMaterial.uniforms.u_offsetX.value));
 });
 
 
@@ -206,7 +481,6 @@ gltfLoader.load("/models/screen.glb", (gltf) => {
             const box = new Box3().setFromObject(child);
             const size = new Vector3();
             box.getSize(size);
-            console.log("Mesh size:", size);
 
             tetrisMaterial.uniforms.u_resolution.value = new Vector2(window.innerWidth, window.innerHeight);
         }
@@ -223,6 +497,9 @@ function lockShapeIntoGrid() {
     const offsetX = tetrisMaterial.uniforms.u_offsetX.value;
     const fallStep = Math.floor((performance.now() / 1000 - tetrisMaterial.uniforms.u_timeStart.value) * 1.0);
     const rotation = Math.floor(tetrisMaterial.uniforms.u_rotation.value / 90) % 4;
+    
+    // Define wall width constant to be consistent
+    const wallWidth = 1;
 
     const shapeData = allShapes[shapeId];
 
@@ -230,7 +507,8 @@ function lockShapeIntoGrid() {
     for (let y = 0; y < 4; y++) {
         for (let x = 0; x < 4; x++) {
             const cell = shapeData[y * 4 + x];
-            if (cell === 9) {
+            // Check for both 9 and 1 as filled cell values
+            if (cell === 9 || cell === 1) {
                 let rx = x, ry = y;
                 
                 // Counter-clockwise rotation in JS (opposite to GLSL)
@@ -238,7 +516,7 @@ function lockShapeIntoGrid() {
                     if (shapeId === 3) { // L piece
                         rx = 3 - y;
                         ry = x;
-                        console.log(`L piece rotation ${rotation}: (${x},${y}) -> (${rx},${ry})`);
+                        // L piece specific rotation
                     } else {
                         rx = 3 - y;
                         ry = x;
@@ -251,14 +529,12 @@ function lockShapeIntoGrid() {
                     ry = 3 - x;
                 }
                 
-                // Keep track of the last position before landing
-                if (y === 3) {
-                    console.log(`Last row rotation state: shape=${shapeId}, rotation=${rotation}, pos=(${x},${y}) -> (${rx},${ry})`);
-                }
+                // Handle last row position
+                // (no logging needed)
 
                 // Debug output to check rotation
                 if (shapeId === 0) { // If it's the L piece
-                    console.log(`Rotating L piece: rotation=${rotation}, from (${x},${y}) to (${rx},${ry})`);
+                    // Rotation transformation applied
                 }
 
                 const gx = offsetX + rx;
@@ -271,7 +547,6 @@ function lockShapeIntoGrid() {
                         shapeId: shapeId
                     };
                     gameGrid[gy][gx] = cell;
-                    console.log(`Landed block at (${gx},${gy}):`, cell);
                 }
             }
         }
@@ -284,9 +559,14 @@ function spawnNewShape() {
     tetrisMaterial.uniforms.u_timeStart.value = performance.now() / 1000;
     tetrisMaterial.uniforms.u_offsetX.value = 0;
     tetrisMaterial.uniforms.u_rotation.value = 0; // Reset rotation for new shape
-    const nextShape = Math.floor(Math.random() * 2);
+    
+    // Use all available shapes (not just 0 and 1)
+    const nextShape = Math.floor(Math.random() * allShapes.length);
+    console.log(`Spawning new shape with ID ${nextShape}`);
     tetrisMaterial.uniforms.u_shapeId.value = nextShape;
-    console.log("🚀 New shape spawned:", nextShape === 0 ? "L" : "Cube");
+    
+    // Check if the new shape is at the edge (it shouldn't be, but just to be safe)
+    checkPieceAtEdge();
 }
 
 // Resize
@@ -311,10 +591,20 @@ function render() {
 
     const fallSpeed = 1.0;
     const blockHeight = 4;
-    const maxFall = gridHeight - blockHeight;
     const fallDuration = now - tetrisMaterial.uniforms.u_timeStart.value;
     const fallStep = Math.floor(fallDuration * fallSpeed);
-
+    
+    // Get current shape and rotation
+    const shapeId = tetrisMaterial.uniforms.u_shapeId.value;
+    const rotation = Math.floor(tetrisMaterial.uniforms.u_rotation.value / 90) % 4;
+    const shape = allShapes[shapeId];
+    
+    // Calculate the bottom offset for current shape+rotation
+    const bottomOffset = getShapeBottomOffset(shape, rotation);
+    
+    // Adjust maxFall based on the shape's bottom offset
+    const maxFall = gridHeight - (blockHeight - (3 - bottomOffset));
+    
     if (fallStep >= maxFall) {
         spawnNewShape();
     }
