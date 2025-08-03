@@ -10,9 +10,8 @@
  * @type {ShaderMaterial~Shader}
  */
 
-// import fragmentShader from './tetris-fragment.glsl' assert { type: 'text' };
-import vertexShader from './tetris-vertex.glsl';
-import fragmentShader from './tetris-fragment.glsl';
+import vertexShader from './shaders/tetris-vertex.glsl';
+import fragmentShader from './shaders/tetris-fragment.glsl';
 
 const TetrisShader = {
 	name: 'TetrisShader',
