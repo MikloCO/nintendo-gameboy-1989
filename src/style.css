@@ -66,13 +66,44 @@ header nav {
     align-items: baseline;
 }
 
-section.sneaker {
-    position: fixed;
-    top: 0;
-    left: 0;
+/* Game container layout */
+.game-container {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 80px); /* Adjust based on your header height */
+    overflow: hidden;
+}
+
+/* Game area styling */
+.sneaker {
     width: 100%;
     height: 100%;
-    z-index: 1;
+    position: relative;
+    z-index: 10; /* Ensure the 3D content is visible */
+}
+
+
+
+#stats {
+    position: absolute;
+    cursor: pointer !important;
+    top: 700px;
+
+}
+
+/* Control panel styling */
+#controls-container {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 0;
+    overflow: visible;
+    z-index: 1000; /* Make sure controls are above game content */
+    width: 250px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    color: #ffffff;
+    border: 1px solid #333;
+    font-family: monospace;
 }
 
 section.new-drop {
@@ -99,3 +130,4 @@ section.content p {
     position: relative;
     z-index: 2;
 }
+

@@ -28,6 +28,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'; 
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+import Stats from 'three/addons/libs/stats.module.js';
 import { TetrisShader } from './tetris-shader'; 
 import { GameOverShader } from './gameover-shader.js';
 import {
@@ -40,8 +42,7 @@ import {
     ZTermino
 } from './ITerminos.js';
 
-
-
+// https://medium.com/@ludivine.constanti/three-js-good-practices-f0d14136e26a
 const allShapes = [ITermino, OTermino, TTermino, LTermino, JTermino, STermino, ZTermino];
 
 
@@ -56,6 +57,47 @@ const renderer = new WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000, 0);
 sneakerTag.appendChild(renderer.domElement);
+
+// Setup Control Panel and Stats - we'll add stats after control panel setup is complete
+
+// Setup Control Panel
+const params = {
+    minScale: 10,
+    maxScale: 20,
+    rotate: true,
+    clear: function() {
+        console.log('Clear function called');
+        // Reset the game or clear the screen
+        resetGame();
+    }
+};
+
+// Initialize GUI
+const gui = new GUI({ 
+    container: document.getElementById('controls-container'),
+    title: 'Controls',
+    width: 250
+});
+
+// Add controls that match the example
+gui.add(params, 'minScale', 1, 20).step(1).name('minScale').onChange(value => {
+    // Apply minScale value to your game
+    console.log(`minScale set to ${value}`);
+    // For example, this could control the minimum zoom level or block size
+});
+
+
+
+// Setup Stats for performance monitoring
+const stats = new Stats();
+stats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
+
+
+
+
+
+
+
 
 // Lights
 const light = new AmbientLight(0xffffff);
@@ -476,66 +518,11 @@ function isValidMove(shapeId, offsetX, rotation, fallOffset = null) {
     return true; // Move is valid
 }
 
-// Function to reset the game
-function resetGame() {
-    // Clear the grid
-    for (let y = 0; y < gridHeight; y++) {
-        for (let x = 0; x < gridWidth; x++) {
-            gameGrid[y][x] = null;
-        }
-    }
-    updateGridTexture();
-    
-    // Reset game state
-    isGameOver = false;
-    
-    // Remove the GAME OVER text if it exists
-    if (gameOverText) {
-        scene.remove(gameOverText);
-        gameOverText = null;
-    }
-    
-    // Remove the HTML overlay if it exists
-    const gameOverDiv = document.getElementById('game-over-text');
-    if (gameOverDiv) {
-        document.body.removeChild(gameOverDiv);
-    }
-    
-    // Reset tetris material time
-    tetrisMaterial.uniforms.u_timeStart.value = performance.now() / 1000;
-    tetrisMaterial.uniforms.u_offsetX.value = Math.floor(gridWidth / 2) - 2;
-    tetrisMaterial.uniforms.u_rotation.value = 0;
-    tetrisMaterial.uniforms.u_shapeId.value = Math.floor(Math.random() * allShapes.length);
-    
-    // Reload the screen with tetris material
-    gltfLoader.load("/models/screen.glb", (gltf) => {
-        gltf.scene.isScreen = true;
-        gltf.scene.traverse(child => {
-            if (child.isMesh) {
-                child.material = tetrisMaterial;
-            }
-        });
-        
-        // Remove old screen
-        loadGroup.children.forEach(child => {
-            if (child.isScreen) {
-                loadGroup.remove(child);
-            }
-        });
-        
-        // Add new screen
-        loadGroup.add(gltf.scene);
-    });
-}
 
 // Key movement
 window.addEventListener("keydown", (e) => {
     // If game is over, allow resetting with R key
-    if (isGameOver && e.code === "KeyR") {
-        console.log("Resetting game");
-        resetGame();
-        return;
-    }
+
     
     // Skip other controls if game is over
     if (isGameOver) return;
@@ -870,6 +857,16 @@ window.addEventListener("resize", () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     tetrisMaterial.uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
     gameOverMaterial.uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
+    
+    // Update GUI width if needed
+    if (gui) {
+        gui.width = 250;
+    }
+    
+    // Reposition stats below controls
+    if (stats && stats.dom) {
+        positionStatsPanel();
+    }
 });
 
 // Post-processing
@@ -880,6 +877,10 @@ composer.addPass(new OutputPass());
 // Main loop
 function render() {
     requestAnimationFrame(render);
+    
+    // Begin stats measurement
+    stats.begin();
+    
     controls.update();
     const now = performance.now() / 1000;
 
@@ -963,6 +964,9 @@ function render() {
 
     scrollGroup.rotation.y = window.scrollY * 0.001;
     composer.render();
+    
+    // End stats measurement
+    stats.end();
 }
 (async () => {
     // Kick off the render loop
