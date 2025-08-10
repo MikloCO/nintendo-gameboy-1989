@@ -1,6 +1,8 @@
 import { tetrisMaterial, gameOverMaterial } from './shader_modules/shader-materials';
-import { camera, renderer } from './tetris-game';
+import { camera, renderer, playButtonAnimation } from './tetris-game';
 import { getGameState, isValidMove, checkPieceAtEdge, isValidRotation } from './Tetris-logic';
+
+
 
 // Key movement
 window.addEventListener("keydown", (e) => {
@@ -33,6 +35,8 @@ window.addEventListener("keydown", (e) => {
     }
 
     if (e.code === "ArrowRight") {
+        playButtonAnimation('arrow_right');
+
         const newOffsetX = currentOffsetX + 1;
         // Check if moving right is valid using the new collision detection
         if (isValidMove(currentShapeId, newOffsetX, currentRotation)) {
@@ -42,6 +46,8 @@ window.addEventListener("keydown", (e) => {
         }
     }
     if (e.code === "ArrowLeft") {
+        playButtonAnimation('arrow_left');
+
         const newOffsetX = currentOffsetX - 1;
         // Check if moving left is valid using the new collision detection
         if (isValidMove(currentShapeId, newOffsetX, currentRotation)) {
@@ -52,6 +58,7 @@ window.addEventListener("keydown", (e) => {
     }
 
     if (e.code === "ArrowUp") {
+        playButtonAnimation('arrowsAction');
         const newRotation = (tetrisMaterial.uniforms.u_rotation.value + 90) % 360;
 
         console.log("Simulating clockwise rotation to check if valid...");
@@ -69,6 +76,8 @@ window.addEventListener("keydown", (e) => {
         }
     }
     if (e.code === "ArrowDown") {
+        playButtonAnimation('down_arrow');
+
         const newRotation = (tetrisMaterial.uniforms.u_rotation.value + 270) % 360;
 
         console.log("Simulating counter-clockwise rotation to check if valid...");
