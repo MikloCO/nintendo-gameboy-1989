@@ -42,6 +42,7 @@ a.button {
     border-radius: 0.25rem;
 }
 
+
 header {
     position: sticky;
     top: 0;
@@ -75,7 +76,7 @@ header nav {
 }
 
 /* Game area styling */
-.sneaker {
+.gameboymodel {
     width: 100%;
     height: 100%;
     position: relative;
@@ -85,10 +86,11 @@ header nav {
 
 
 #stats {
-    position: absolute;
-    cursor: pointer !important;
-    top: 700px;
-
+    position: absolute !important;
+    z-index: 1000 !important;
+    width: 250px !important;
+    right: 10px !important;
+    top: 10px !important; /* Position at the top */
 }
 
 /* Control panel styling */

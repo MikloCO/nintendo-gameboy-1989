@@ -18,7 +18,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { TetrisShader } from './tetris-shader';
+import { TetrisShader } from './shader_modules/tetris-shader';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
@@ -26,18 +26,18 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); // or your local path
 
-const sneakerTag = document.querySelector("section.sneaker");
+const gameboyTag = document.querySelector("section.gameboymodel");
 
 animate("header", 
     {
-        y: [-100, 0],
+        y: [-20, 0],
         opacity: [0, 1]
     }, 
     { duration: 1, delay: 2.5 }
 )
 
 animate("section.new-drop", {
-    y: [-100, 0],
+    y: [-20, 0],
     opacity: [0, 1]
 },
 {duration: 1, delay: 2})
@@ -59,7 +59,7 @@ const camera = new PerspectiveCamera(19, window.innerWidth / window.innerHeight,
 const renderer = new WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000, 0);
-sneakerTag.appendChild(renderer.domElement);
+gameboyTag.appendChild(renderer.domElement);
 
 // Lighting
 const light = new AmbientLight(0xFFFFFF);
@@ -83,14 +83,6 @@ const material = new MeshLambertMaterial({ color: 0xffff00 });
 
 
 
-const tetrisMaterial = new ShaderMaterial({
-    uniforms: TetrisShader.uniforms,
-    vertexShader: TetrisShader.vertexShader,
-    fragmentShader: TetrisShader.fragmentShader,
-    transparent: false
-});
-
-
 const loadGroup = new Group();
 loadGroup.position.y = -4;
 
@@ -108,7 +100,7 @@ gltfLoader.load("/models/gameboy.glb", (gltf) => {
 gltfLoader.load("/models/screen.glb", (gltf) => {
     gltf.scene.traverse((child) => {
         if (child.isMesh) {
-            child.material = tetrisMaterial; // Override with your shader material
+            child.material = material; 
         }
     });
     loadGroup.add(gltf.scene);
@@ -129,7 +121,7 @@ animate(0, 1, {
     duration: 2,
     delay: 1,
     onUpdate: (t) => {
-        loadGroup.position.y = -15 + (15 * t); 
+        loadGroup.position.y = -5 + (5 * t); 
     },
 });
 
@@ -143,7 +135,7 @@ controls.autoRotate = true;
 controls.autoRotateSpeed = 0.5;
 controls.update();
 
-camera.position.set(0, 0, -20)
+camera.position.set(0, 0, 20);
 
 // Post-processing
 const composer = new EffectComposer(renderer);
@@ -155,9 +147,6 @@ composer.addPass(renderPass);
 
 const outputPass = new OutputPass();
 composer.addPass(outputPass);
-
-
-
 
 
 const render = () =>{
