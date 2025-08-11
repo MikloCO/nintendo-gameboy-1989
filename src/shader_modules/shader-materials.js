@@ -28,7 +28,8 @@ export const tetrisMaterial = new ShaderMaterial({
         u_rotation: { value: 0 }, // rotation stored as int (0, 90, 180, 270)
         u_resolution: { value: new Vector2(window.innerWidth, window.innerHeight) },
         opacity: { value: 1.0 },
-        u_gridTexture: { value: getGridTexture() }
+        u_gridTexture: { value: getGridTexture() },
+        u_emission: { value: 1.0 },
     },
     vertexShader: TetrisShader.vertexShader,
     fragmentShader: TetrisShader.fragmentShader,

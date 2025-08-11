@@ -12,7 +12,7 @@ export class ControlPanel {
         this.gui.add(params, 'minScale', 1, 20).step(1).name('minScale').onChange(value => {
             console.log(`minScale set to ${value}`);
         });
-        // Add more controls as needed
+
     }
 }
 

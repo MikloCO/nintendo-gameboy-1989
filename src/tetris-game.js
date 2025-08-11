@@ -54,7 +54,7 @@ renderer.setClearColor(0x000000, 0);
 canvasTag.appendChild(renderer.domElement);
 
 // UI panels
-const params = { minScale: 10, maxScale: 20, rotate: true };
+export const params = { minScale: 10, maxScale: 20, rotate: true, emission: 10000.0 };
 const controlsContainer = document.getElementById('controls-container');
 new ControlPanel(params, controlsContainer);
 const statsPanel = new StatsPanel(controlsContainer);
@@ -104,11 +104,23 @@ gltfLoader.load("/models/gameboy.glb", (gltf) => {
 
     // Only disable raycast for objects we DON'T want to interact with
     gltf.scene.traverse(c => {
+
         // Keep raycasting enabled for buttons and controls
         const keepRaycast = ['A', 'B', 'contrast', 'vol', 'off_on'].includes(c.name);
         
+        
         if (c.isMesh && !keepRaycast) {
             c.raycast = () => null;
+            if (c.isMesh && c.material) {
+                // Only set emission for supported material types
+                if (
+                    c.material.type === 'MeshStandardMaterial' ||
+                    c.material.type === 'MeshPhysicalMaterial'
+                ) {
+                    c.material.emissive.set(0xF76F65);
+                    c.material.emissiveIntensity = 0; 
+                }
+            }
         } else if (keepRaycast) {
             // Add userData to identify interactive parts
             c.userData.isInteractive = true;
@@ -243,16 +255,33 @@ function onCanvasClick(event) {
                     playButtonAnimation('off_on');
                     dummyswitch = true;
                     scene.traverse(child => {
+
+                        console.log(child.children)
                         // Check if this is the screen or a mesh within the screen
                         if ((child.isScreen || (child.parent && child.parent.isScreen)) && child.isMesh) {
                             // Store the original texture if available
                             if (child.material && child.material.map) {
                                 tetrisMaterial.uniforms.u_texture.value = child.material.map;
                             }
-
                             // Apply the game over shader material
                             child.material = tetrisMaterial;
                         }
+                            // Keep raycasting enabled for buttons and controls
+                            const keepRaycast = ['A', 'B', 'contrast', 'vol', 'off_on', 'out_cartridge'].includes(child.name);
+
+                            if (child.isMesh && !keepRaycast) {
+                                child.raycast = () => null;
+                                if (child.isMesh && child.material) {
+                                    // Only set emission for supported material types
+                                    if (
+                                        child.material.type === 'MeshStandardMaterial' ||
+                                        child.material.type === 'MeshPhysicalMaterial'
+                                    ) {
+                                        child.material.emissive.set(0xF76F65);
+                                        child.material.emissiveIntensity = 100; // Try a very high value
+                                    }
+                                }
+                            } 
                     });
                 }
                 gameboy_turned_off = !gameboy_turned_off;
@@ -347,7 +376,6 @@ function onCanvasClick(event) {
 
 
 
-
 // ─── Render Loop ──────────────────────────────────────────────────────────────
 function render() {
     requestAnimationFrame(render);
@@ -375,8 +403,10 @@ function render() {
         gameloop(t);
         statsPanel.statsObject.end();
     }
-    composer.render();
     scrollGroup.rotation.y = window.scrollY * 0.001;
+    
+    composer.render();
+
 }
 
 render();

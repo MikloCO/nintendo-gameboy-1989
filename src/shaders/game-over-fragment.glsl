@@ -8,6 +8,7 @@ uniform sampler2D u_fontAtlas; // Texture atlas for font
 uniform sampler2D u_pleaseAtlas; 
 uniform sampler2D u_tryAtlas; 
 uniform sampler2D u_againAtlas; 
+uniform float u_emission;
 varying vec2 vUv;
 
 // Function to check if a point is within the text area
