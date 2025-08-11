@@ -344,31 +344,17 @@ export function spawnNewShape() {
     // Check if the new shape can be placed (if not, game would be over)
     const canPlace = isValidMove(nextShape, initialOffsetX, 0, 0);
     if (!canPlace) {
-        // Only print this message once when game over first occurs
-        if (!isGameOver) {
-            console.log("GAME OVER: Cannot place new shape!");
-        }
-        
+       
         // Set game over state
         isGameOver = true;
 
         // Show GAME OVER text
         showGameOverText();
 
-        // Apply the game over material to the existing screen - only log once
-        if (!gameOverSoundPlayed) {
-            console.log("Applying game over shader to screen meshes...");
-        }
-
         // Search for screen in all groups
         const applyToGroup = (group) => {
             group.traverse(child => {
                 if ((child.isScreen || (child.parent && child.parent.isScreen)) && child.isMesh) {
-                    // Only log once
-                    if (!gameOverSoundPlayed) {
-                        console.log("Found screen mesh, applying game over material");
-                    }
-
                     // Save original texture if available
                     if (child.material && child.material.map && !gameOverMaterial.uniforms.u_texture.value) {
                         gameOverMaterial.uniforms.u_texture.value = child.material.map;
@@ -376,11 +362,6 @@ export function spawnNewShape() {
 
                     // Apply game over material
                     child.material = gameOverMaterial;
-                    
-                    // Only log once
-                    if (!gameOverSoundPlayed) {
-                        console.log("Applied game over material to screen mesh");
-                    }
                 }
             });
         };
@@ -494,27 +475,18 @@ function showGameOverText() {
             gameOverText = null;
         }
 
-        // Only log this once
-        if (!gameOverSoundPlayed) {
-            console.log("Showing game over effect on screen...");
-        }
-
         // Find and apply the game over shader to the screen
         const applyGameOverShader = (group) => {
             group.traverse(child => {
                 // Check if this is the screen or a mesh within the screen
                 if ((child.isScreen || (child.parent && child.parent.isScreen)) && child.isMesh) {
-                    console.log("Found screen mesh to apply game over shader");
-
                     // Store the original texture if available
                     if (child.material && child.material.map) {
                         gameOverMaterial.uniforms.u_texture.value = child.material.map;
-                        console.log("Applied original texture to game over shader");
                     }
 
                     // Apply the game over shader material
                     child.material = gameOverMaterial;
-                    console.log("Applied game over shader to screen mesh");
                 }
             });
         };
@@ -529,11 +501,6 @@ function showGameOverText() {
 
         // Only log these messages once
         if (!gameOverSoundPlayed) {
-            // For the game over effect, we'll just apply a subtle screen effect
-            console.log("Applied subtle game over effect without text");
-            console.log("Game over shader applied to screen");
-
-            // Play a beep sound only once
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const oscillator = audioContext.createOscillator();

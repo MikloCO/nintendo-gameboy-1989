@@ -30,8 +30,16 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { gameOverMaterial, tetrisMaterial } from './shader_modules/shader-materials.js';
 import { ControlPanel, StatsPanel } from './statistics.js';
-import { getGameState, GG as endOfGame, gameloop } from './Tetris-logic.js';
+import { getGameState, GG as endOfGame, gameloop, isValidMove, isValidRotation, checkPieceAtEdge } from './Tetris-logic.js';
 import './controller.js';
+
+const GAME_STATES = {
+    START_SCREEN: 'start_screen',
+    PLAYING: 'playing',
+    GAME_OVER: 'game_over'
+};
+
+let currentGameState = GAME_STATES.START_SCREEN;
 
 const canvasTag = document.querySelector("section.gameboymodel");
 
@@ -91,12 +99,22 @@ gltfLoader.setDRACOLoader(dracoLoader);
 
 // Animation setup
 let mixer, animations = {}, currentAnimation;
-gltfLoader.load("/models/gameboy_anims.glb", (gltf) => {
+gltfLoader.load("/models/gameboy.glb", (gltf) => {
     loadGroup.add(gltf.scene);
 
-    // disable raycast on all default meshes
+    // Only disable raycast for objects we DON'T want to interact with
     gltf.scene.traverse(c => {
-        if (c.isMesh) c.raycast = () => null;
+        // Keep raycasting enabled for buttons and controls
+        const keepRaycast = ['A', 'B', 'contrast', 'vol', 'off_on'].includes(c.name);
+        
+        if (c.isMesh && !keepRaycast) {
+            c.raycast = () => null;
+        } else if (keepRaycast) {
+            // Add userData to identify interactive parts
+            c.userData.isInteractive = true;
+            c.userData.controlType = c.name;
+            console.log(`Made ${c.name} interactive for raycasting`);
+        }
     });
 
     mixer = new AnimationMixer(gltf.scene);
@@ -109,7 +127,7 @@ gltfLoader.load("/models/screen.glb", (gltf) => {
     gltf.scene.isScreen = true;
     gltf.scene.traverse(c => {
         if (c.isMesh) {
-            c.material = tetrisMaterial;
+            c.material = turned_off_material;
             tetrisMaterial.uniforms.u_resolution.value = new Vector2(window.innerWidth, window.innerHeight);
         }
     });
@@ -140,8 +158,6 @@ composer.addPass(new OutputPass());
 
 // ─── Markers ─────────────────────────────────────────────────────────────────
 const markerData = [
-    { position: [0.28, -0.17, 0.155], mesh: 'A', animation: 'AAction.001' },
-    { position: [0.15, -0.24, 0.155], mesh: 'B', animation: 'BAction' },
     { position: [-0.15, -0.20, 0.16], mesh: 'arrow_right', animation: 'arrow_right' },
     { position: [-0.35, -0.20, 0.16], mesh: 'arrow_left', animation: 'arrow_left' },
     { position: [-0.25, -0.30, 0.16], mesh: 'down_arrow', animation: 'down_arrow' },
@@ -153,11 +169,11 @@ markerData.forEach((marker, idx) => {
 
     const torus = new Mesh(
         new TorusGeometry(0.06, 0.01, 2, 100),
-        new MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.8 })
+        new MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.0 })
     );
     const circle = new Mesh(
         new CircleGeometry(0.05, 32),
-        new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.2 })
+        new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.0 })
     );
 
     markerContainer.add(torus, circle);
@@ -176,6 +192,14 @@ const pointer = new Vector2();
 // **Attach click listener to the canvas** itself:
 renderer.domElement.addEventListener('click', onCanvasClick);
 
+let gameboy_turned_off = false;
+
+const turned_off_material = new MeshBasicMaterial({
+    color: 0x879372, // Classic Gameboy green color
+    transparent: false
+});
+
+let dummyswitch = false;
 function onCanvasClick(event) {
     // 1) Figure out mouse in NDC space **relative to the canvas**:
     const rect = renderer.domElement.getBoundingClientRect();
@@ -189,6 +213,55 @@ function onCanvasClick(event) {
 
     if (!intersects.length) return;
 
+    // First, check if we hit an interactive control directly
+    const interactiveHit = intersects.find(hit => hit.object.userData.isInteractive);
+    if (interactiveHit) {
+        const controlType = interactiveHit.object.userData.controlType;
+        console.log(`Clicked on ${controlType} control`);
+        
+        // Play corresponding animation
+        switch (controlType) {
+            case 'A':
+                playButtonAnimation('AAction.001');
+                break;
+            case 'B':
+                playButtonAnimation('BAction');
+                break;
+            case 'contrast':
+                playButtonAnimation('contrastAction'); // or whatever the animation is called
+                break;
+            case 'vol':
+                playButtonAnimation('vol_up');
+                break;
+            // Add other controls as needed
+            case 'off_on':
+                if (gameboy_turned_off) {
+                    playButtonAnimation('on_off');
+
+                }
+                else {
+                    playButtonAnimation('off_on');
+                    dummyswitch = true;
+                    scene.traverse(child => {
+                        // Check if this is the screen or a mesh within the screen
+                        if ((child.isScreen || (child.parent && child.parent.isScreen)) && child.isMesh) {
+                            // Store the original texture if available
+                            if (child.material && child.material.map) {
+                                tetrisMaterial.uniforms.u_texture.value = child.material.map;
+                            }
+
+                            // Apply the game over shader material
+                            child.material = tetrisMaterial;
+                        }
+                    });
+                }
+                gameboy_turned_off = !gameboy_turned_off;
+                break;
+        }
+        return;
+    }
+    
+    // If no interactive control was hit, continue with your existing marker check...
     // 3) Find the first hit under a tagged container
     const hit = intersects.find(({ object }) => {
         let o = object;
@@ -209,12 +282,71 @@ function onCanvasClick(event) {
 
     console.clear();
     console.log('Clicked marker data:', markerData[idx]);
+    
+    // Skip if gameboy is turned off or game is over
+    // if (gameboy_turned_off || getGameState().isGameOver) return;
+    
+    // Get current game state for manipulation
+    const currentShapeId = tetrisMaterial.uniforms.u_shapeId.value;
+    const currentOffsetX = tetrisMaterial.uniforms.u_offsetX.value;
+    const currentRotation = tetrisMaterial.uniforms.u_rotation.value;
+    
     if (markerData[idx].mesh) {
         playButtonAnimation(markerData[idx].animation);
+        
+        // Add Tetris game logic based on which marker was clicked
+        switch (markerData[idx].mesh) {
+            case 'up_arrow':
+                // Rotate piece clockwise (same as UP arrow key)
+                const newRotation = (currentRotation + 90) % 360;
+                if (isValidRotation(currentShapeId, currentOffsetX, newRotation)) {
+                    console.log("Rotation is safe - applying it");
+                    tetrisMaterial.uniforms.u_rotation.value = newRotation;
+                    checkPieceAtEdge();
+                } else {
+                    console.log("Rotation blocked - would cause collision");
+                }
+                break;
+                
+            case 'down_arrow':
+                // Rotate piece counter-clockwise (or fast drop if you prefer)
+                const ccwRotation = (currentRotation + 270) % 360;
+                if (isValidRotation(currentShapeId, currentOffsetX, ccwRotation)) {
+                    console.log("Counter-clockwise rotation is safe - applying it");
+                    tetrisMaterial.uniforms.u_rotation.value = ccwRotation;
+                    checkPieceAtEdge();
+                }
+                break;
+                
+            case 'arrow_left':
+                // Move piece left (same as LEFT arrow key)
+                const newOffsetXLeft = currentOffsetX - 1;
+                if (isValidMove(currentShapeId, newOffsetXLeft, currentRotation)) {
+                    console.log("Moving left");
+                    tetrisMaterial.uniforms.u_offsetX.value = newOffsetXLeft;
+                    checkPieceAtEdge();
+                } else {
+                    console.log("Can't move left - blocked");
+                }
+                break;
+                
+            case 'arrow_right':
+                // Move piece right (same as RIGHT arrow key)
+                const newOffsetXRight = currentOffsetX + 1;
+                if (isValidMove(currentShapeId, newOffsetXRight, currentRotation)) {
+                    console.log("Moving right");
+                    tetrisMaterial.uniforms.u_offsetX.value = newOffsetXRight;
+                    checkPieceAtEdge();
+                } else {
+                    console.log("Can't move right - blocked");
+                }
+                break;
+        }
     }
-
-
 }
+
+
+
 
 // ─── Render Loop ──────────────────────────────────────────────────────────────
 function render() {
@@ -223,23 +355,28 @@ function render() {
     controls.update();
 
     const t = performance.now() / 1000;
-    tetrisMaterial.uniforms.u_time.value = t;
-    gameOverMaterial.uniforms.u_time.value = t;
+    console.log(dummyswitch)
 
-    if (mixer) mixer.update(0.016);
 
-    if (getGameState().isGameOver) {
-        endOfGame(t);
-        scrollGroup.rotation.y = window.scrollY * 0.001;
-        composer.render();
+    if (dummyswitch === true) {
+        tetrisMaterial.uniforms.u_time.value = t;
+        gameOverMaterial.uniforms.u_time.value = t;
+
+        if (mixer) mixer.update(0.016);
+
+        if (getGameState().isGameOver) {
+            endOfGame(t);
+            scrollGroup.rotation.y = window.scrollY * 0.001;
+            composer.render();
+            statsPanel.statsObject.end();
+            return;
+        }
+
+        gameloop(t);
         statsPanel.statsObject.end();
-        return;
     }
-
-    gameloop(t);
-    scrollGroup.rotation.y = window.scrollY * 0.001;
     composer.render();
-    statsPanel.statsObject.end();
+    scrollGroup.rotation.y = window.scrollY * 0.001;
 }
 
 render();
