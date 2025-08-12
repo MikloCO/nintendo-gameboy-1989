@@ -32,6 +32,7 @@ import { gameOverMaterial, tetrisMaterial } from './shader_modules/shader-materi
 import { ControlPanel, StatsPanel } from './statistics.js';
 import { getGameState, GG as endOfGame, gameloop, isValidMove, isValidRotation, checkPieceAtEdge } from './Tetris-logic.js';
 import './controller.js';
+import { act } from 'react';
 
 const GAME_STATES = {
     START_SCREEN: 'start_screen',
@@ -105,9 +106,12 @@ gltfLoader.load("/models/gameboy.glb", (gltf) => {
     // Only disable raycast for objects we DON'T want to interact with
     gltf.scene.traverse(c => {
 
+
         // Keep raycasting enabled for buttons and controls
-        const keepRaycast = ['A', 'B', 'contrast', 'vol', 'off_on'].includes(c.name);
-        
+        const keepRaycast = c.userData.isInteractive
+            || c.userData.markerName != null
+            || ['A', 'B', 'contrast', 'vol', 'off_on', 'out_cartridge', 'arrow_left']
+                .includes(c.name);        
         
         if (c.isMesh && !keepRaycast) {
             c.raycast = () => null;
@@ -152,6 +156,7 @@ gltfLoader.load("/models/cartridge.glb", (gltf) => {
 // Helper to play named animations
 export function playButtonAnimation(buttonName, onComplete = null) {
     const action = animations[buttonName];
+    console.log(action);
     if (!action) {
         console.warn(`Animation "${buttonName}" not found`);
         return;
@@ -160,6 +165,7 @@ export function playButtonAnimation(buttonName, onComplete = null) {
     currentAnimation = action;
     action.reset().setLoop(false, 1).clampWhenFinished = true;
     action.play();
+    console.log("PLayed")
     if (onComplete) setTimeout(onComplete, action.getClip().duration * 1000);
 }
 
@@ -181,12 +187,18 @@ markerData.forEach((marker, idx) => {
 
     const torus = new Mesh(
         new TorusGeometry(0.06, 0.01, 2, 100),
-        new MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.0 })
+        new MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.01 })
     );
     const circle = new Mesh(
         new CircleGeometry(0.05, 32),
-        new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.0 })
+        new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1 })
     );
+
+    [torus, circle].forEach(mesh => {
+        mesh.userData.isInteractive = true;
+        mesh.userData.controlType = marker.mesh; 
+    });
+
 
     markerContainer.add(torus, circle);
     markerContainer.position.set(...marker.position);
@@ -230,6 +242,9 @@ function onCanvasClick(event) {
     if (interactiveHit) {
         const controlType = interactiveHit.object.userData.controlType;
         console.log(`Clicked on ${controlType} control`);
+        const currentShapeId = tetrisMaterial.uniforms.u_shapeId.value;
+        const currentOffsetX = tetrisMaterial.uniforms.u_offsetX.value;
+        const currentRotation = tetrisMaterial.uniforms.u_rotation.value;
         
         // Play corresponding animation
         switch (controlType) {
@@ -244,6 +259,58 @@ function onCanvasClick(event) {
                 break;
             case 'vol':
                 playButtonAnimation('vol_up');
+                break;
+            case 'up_arrow':
+                // Rotate piece clockwise (same as UP arrow key)
+                playButtonAnimation('arrowsAction');
+                const newRotation = (currentRotation + 90) % 360;
+                if (isValidRotation(currentShapeId, currentOffsetX, newRotation)) {
+                    console.log("Rotation is safe - applying it");
+                    tetrisMaterial.uniforms.u_rotation.value = newRotation;
+                    checkPieceAtEdge();
+                } else {
+                    console.log("Rotation blocked - would cause collision");
+                }
+                break;
+
+            case 'down_arrow':
+                playButtonAnimation('down_arrow');
+
+                // Rotate piece counter-clockwise (or fast drop if you prefer)
+                const ccwRotation = (currentRotation + 270) % 360;
+                if (isValidRotation(currentShapeId, currentOffsetX, ccwRotation)) {
+                    console.log("Counter-clockwise rotation is safe - applying it");
+                    tetrisMaterial.uniforms.u_rotation.value = ccwRotation;
+                    checkPieceAtEdge();
+                }
+                break;
+
+            case 'arrow_left':
+                playButtonAnimation('arrow_left');
+
+                // Move piece left (same as LEFT arrow key)
+                const newOffsetXLeft = currentOffsetX - 1;
+                if (isValidMove(currentShapeId, newOffsetXLeft, currentRotation)) {
+                    console.log("Moving left");
+                    tetrisMaterial.uniforms.u_offsetX.value = newOffsetXLeft;
+                    checkPieceAtEdge();
+                } else {
+                    console.log("Can't move left - blocked");
+                }
+                break;
+
+            case 'arrow_right':
+                playButtonAnimation('arrow_right');
+
+                // Move piece right (same as RIGHT arrow key)
+                const newOffsetXRight = currentOffsetX + 1;
+                if (isValidMove(currentShapeId, newOffsetXRight, currentRotation)) {
+                    console.log("Moving right");
+                    tetrisMaterial.uniforms.u_offsetX.value = newOffsetXRight;
+                    checkPieceAtEdge();
+                } else {
+                    console.log("Can't move right - blocked");
+                }
                 break;
             // Add other controls as needed
             case 'off_on':
@@ -267,8 +334,9 @@ function onCanvasClick(event) {
                             child.material = tetrisMaterial;
                         }
                             // Keep raycasting enabled for buttons and controls
-                            const keepRaycast = ['A', 'B', 'contrast', 'vol', 'off_on', 'out_cartridge'].includes(child.name);
-
+                        const keepRaycast = child.userData.isInteractive
+                            || child.userData.markerName != null
+                            || ['A', 'B', 'contrast', 'vol', 'off_on', 'out_cartridge'].includes(child.name);                            console.log(child.name, keepRaycast);
                             if (child.isMesh && !keepRaycast) {
                                 child.raycast = () => null;
                                 if (child.isMesh && child.material) {
@@ -287,6 +355,7 @@ function onCanvasClick(event) {
                 gameboy_turned_off = !gameboy_turned_off;
                 break;
         }
+
         return;
     }
     
@@ -315,63 +384,64 @@ function onCanvasClick(event) {
     // Skip if gameboy is turned off or game is over
     // if (gameboy_turned_off || getGameState().isGameOver) return;
     
-    // Get current game state for manipulation
-    const currentShapeId = tetrisMaterial.uniforms.u_shapeId.value;
-    const currentOffsetX = tetrisMaterial.uniforms.u_offsetX.value;
-    const currentRotation = tetrisMaterial.uniforms.u_rotation.value;
-    
-    if (markerData[idx].mesh) {
-        playButtonAnimation(markerData[idx].animation);
+    // // Get current game state for manipulation
+    // const currentShapeId = tetrisMaterial.uniforms.u_shapeId.value;
+    // const currentOffsetX = tetrisMaterial.uniforms.u_offsetX.value;
+    // const currentRotation = tetrisMaterial.uniforms.u_rotation.value;
+    // console.log()
+    // if (markerData[idx].mesh) {
+    //     console.log(markerData[idx].animation);
+    //     playButtonAnimation(markerData[idx].animation);
         
-        // Add Tetris game logic based on which marker was clicked
-        switch (markerData[idx].mesh) {
-            case 'up_arrow':
-                // Rotate piece clockwise (same as UP arrow key)
-                const newRotation = (currentRotation + 90) % 360;
-                if (isValidRotation(currentShapeId, currentOffsetX, newRotation)) {
-                    console.log("Rotation is safe - applying it");
-                    tetrisMaterial.uniforms.u_rotation.value = newRotation;
-                    checkPieceAtEdge();
-                } else {
-                    console.log("Rotation blocked - would cause collision");
-                }
-                break;
+    //     // Add Tetris game logic based on which marker was clicked
+    //     switch (markerData[idx].mesh) {
+    //         case 'up_arrow':
+    //             // Rotate piece clockwise (same as UP arrow key)
+    //             const newRotation = (currentRotation + 90) % 360;
+    //             if (isValidRotation(currentShapeId, currentOffsetX, newRotation)) {
+    //                 console.log("Rotation is safe - applying it");
+    //                 tetrisMaterial.uniforms.u_rotation.value = newRotation;
+    //                 checkPieceAtEdge();
+    //             } else {
+    //                 console.log("Rotation blocked - would cause collision");
+    //             }
+    //             break;
                 
-            case 'down_arrow':
-                // Rotate piece counter-clockwise (or fast drop if you prefer)
-                const ccwRotation = (currentRotation + 270) % 360;
-                if (isValidRotation(currentShapeId, currentOffsetX, ccwRotation)) {
-                    console.log("Counter-clockwise rotation is safe - applying it");
-                    tetrisMaterial.uniforms.u_rotation.value = ccwRotation;
-                    checkPieceAtEdge();
-                }
-                break;
+    //         case 'down_arrow':
+    //             // Rotate piece counter-clockwise (or fast drop if you prefer)
+    //             const ccwRotation = (currentRotation + 270) % 360;
+    //             if (isValidRotation(currentShapeId, currentOffsetX, ccwRotation)) {
+    //                 console.log("Counter-clockwise rotation is safe - applying it");
+    //                 tetrisMaterial.uniforms.u_rotation.value = ccwRotation;
+    //                 checkPieceAtEdge();
+    //             }
+    //             break;
                 
-            case 'arrow_left':
-                // Move piece left (same as LEFT arrow key)
-                const newOffsetXLeft = currentOffsetX - 1;
-                if (isValidMove(currentShapeId, newOffsetXLeft, currentRotation)) {
-                    console.log("Moving left");
-                    tetrisMaterial.uniforms.u_offsetX.value = newOffsetXLeft;
-                    checkPieceAtEdge();
-                } else {
-                    console.log("Can't move left - blocked");
-                }
-                break;
+    //         case 'arrow_left':
+    //             // Move piece left (same as LEFT arrow key)
+    //             const newOffsetXLeft = currentOffsetX - 1;
+    //             if (isValidMove(currentShapeId, newOffsetXLeft, currentRotation)) {
+    //                 console.log("Moving left");
+    //                 tetrisMaterial.uniforms.u_offsetX.value = newOffsetXLeft;
+    //                 checkPieceAtEdge();
+    //             } else {
+    //                 console.log("Can't move left - blocked");
+    //             }
+    //             break;
                 
-            case 'arrow_right':
-                // Move piece right (same as RIGHT arrow key)
-                const newOffsetXRight = currentOffsetX + 1;
-                if (isValidMove(currentShapeId, newOffsetXRight, currentRotation)) {
-                    console.log("Moving right");
-                    tetrisMaterial.uniforms.u_offsetX.value = newOffsetXRight;
-                    checkPieceAtEdge();
-                } else {
-                    console.log("Can't move right - blocked");
-                }
-                break;
-        }
-    }
+    //         case 'arrow_right':
+    //             // Move piece right (same as RIGHT arrow key)
+    //             const newOffsetXRight = currentOffsetX + 1;
+    //             if (isValidMove(currentShapeId, newOffsetXRight, currentRotation)) {
+    //                 console.log("Moving right");
+    //                 tetrisMaterial.uniforms.u_offsetX.value = newOffsetXRight;
+    //                 checkPieceAtEdge();
+    //             } else {
+    //                 console.log("Can't move right - blocked");
+    //             }
+    //             break;
+    //     }
+    // }
 }
 
 
@@ -383,14 +453,13 @@ function render() {
     controls.update();
 
     const t = performance.now() / 1000;
-    console.log(dummyswitch)
+    if (mixer) mixer.update(0.016);
 
 
     if (dummyswitch === true) {
         tetrisMaterial.uniforms.u_time.value = t;
         gameOverMaterial.uniforms.u_time.value = t;
 
-        if (mixer) mixer.update(0.016);
 
         if (getGameState().isGameOver) {
             endOfGame(t);

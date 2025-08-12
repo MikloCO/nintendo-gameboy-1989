@@ -103,10 +103,10 @@ window.addEventListener("resize", () => {
     tetrisMaterial.uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
     gameOverMaterial.uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
 
-    // Update GUI width if needed
-    if (gui) {
-        gui.width = 250;
-    }
+    // // Update GUI width if needed
+    // if (gui) {
+    //     gui.width = 250;
+    // }
 
     // Reposition stats below controls
     // if (stats && stats.dom) {

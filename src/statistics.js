@@ -1,5 +1,21 @@
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import Stats from 'three/addons/libs/stats.module.js';
+import { scene } from './tetris-game.js';
+
+const wireframe = {
+    enabled: false,
+    enableWireframe: function () {
+        scene.traverse(obj => {
+            if (obj.isMesh) {
+                if (!obj.material.isWireframeCloned) {
+                    obj.material = obj.material.clone();
+                    obj.material.isWireframeCloned = true;
+                }
+                obj.material.wireframe = !obj.material.wireframe;
+            }
+        });
+    },
+};
 
 
 export class ControlPanel {
@@ -9,11 +25,30 @@ export class ControlPanel {
             title: 'Controls',
             width: 250
         });
-        this.gui.add(params, 'minScale', 1, 20).step(1).name('minScale').onChange(value => {
-            console.log(`minScale set to ${value}`);
-        });
+        this.gui.add(wireframe, 'enabled')
+            .name('Toggle Wireframe')
+            .onChange(value => {
+                wireframe.enableWireframe();
+            });
+        const imgPanel = document.createElement('div');
+        imgPanel.className = 'image-stack-panel';
 
-    }
+        const images = Object.keys(import.meta.glob('/public/gameboy_textures/*.png'));
+        images.forEach(src => {
+            const div = document.createElement('div');
+            div.className = 'image-slice';
+            div.style.backgroundImage = `url(${src})`;
+            imgPanel.appendChild(div);
+        });
+        const folder = this.gui.addFolder('Texture Maps');
+        const imagePanel = document.createElement('div');
+        imagePanel.className = 'image-stack-panel';
+        folder.$children.appendChild(imgPanel);
+
+
+
+        
+    } 
 }
 
 export class StatsPanel {
