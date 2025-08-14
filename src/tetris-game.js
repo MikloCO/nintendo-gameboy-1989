@@ -10,6 +10,8 @@ import {
     DirectionalLight,
     Group,
     Box3,
+    Shape,
+    ShapeGeometry,
     Vector3,
     Vector2,
     LinearFilter,
@@ -21,6 +23,9 @@ import {
     TorusGeometry,
     MeshBasicMaterial,
     CircleGeometry,
+    DoubleSide,
+    Sprite,
+    SpriteMaterial
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -29,7 +34,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { gameOverMaterial, tetrisMaterial } from './shader_modules/shader-materials.js';
-import { ControlPanel, StatsPanel } from './statistics.js';
+import { ControlPanel, StatsPanel, autoRotate } from './statistics.js';
 import { getGameState, GG as endOfGame, gameloop, isValidMove, isValidRotation, checkPieceAtEdge } from './Tetris-logic.js';
 import './controller.js';
 import { act } from 'react';
@@ -42,11 +47,14 @@ const GAME_STATES = {
 
 let currentGameState = GAME_STATES.START_SCREEN;
 
+let arrowContainer = null;
+let arrowBaseY = null;
+
 const canvasTag = document.querySelector("section.gameboymodel");
 
 // THREE.js setup
 export const scene = new Scene();
-export const camera = new PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 20);
+export const camera = new PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
 camera.position.set(0, 0, 2);
 
 export const renderer = new WebGLRenderer({ antialias: true, alpha: true });
@@ -102,6 +110,41 @@ gltfLoader.setDRACOLoader(dracoLoader);
 let mixer, animations = {}, currentAnimation;
 gltfLoader.load("/models/gameboy.glb", (gltf) => {
     loadGroup.add(gltf.scene);
+
+    // Compute bounding box of the Gameboy
+    const box = new Box3().setFromObject(gltf.scene);
+    const center = new Vector3();
+    box.getCenter(center);
+
+    const triangleY = box.max.y + 0.1;
+
+    // Create your triangle mesh
+    const shape = new Shape();
+    shape.moveTo(0, -1);    // bottom vertex (tip)
+    shape.lineTo(-1, 1);    // top left (base)
+    shape.lineTo(1, 1);     // top right (base)
+    shape.lineTo(0, -1);
+
+    const triangleGeometry = new ShapeGeometry(shape);
+    const triangleMaterial = new MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.5, side: DoubleSide });
+    const triangleMesh = new Mesh(triangleGeometry, triangleMaterial);
+    triangleMesh.scale.set(0.05, 0.05, 0.05);
+
+    // Create a container for the triangle
+    arrowContainer = new Object3D(); // Remove 'const' to make it global
+    arrowContainer.add(triangleMesh);
+
+    // Position the arrow above the Gameboy
+    arrowContainer.position.set(center.x - .31, triangleY, center.z);
+    arrowBaseY = arrowContainer.position.y; // Add this line to store original Y
+
+    // Add to the scene/group
+    loadGroup.add(arrowContainer);
+
+    // --- Add text sprite above the triangle ---
+    const textSprite = createTextSprite('Toggle to play!');
+    textSprite.position.set(center.x - .3, triangleY + 0.002, center.z); // adjust Y offset as needed
+    loadGroup.add(textSprite);
 
     // Only disable raycast for objects we DON'T want to interact with
     gltf.scene.traverse(c => {
@@ -173,6 +216,32 @@ export function playButtonAnimation(buttonName, onComplete = null) {
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 composer.addPass(new OutputPass());
+
+
+// const arrow = [
+//     {position: [-0.25, -1.20, 0.16] },
+//     {position: [-0.25, -0.30, 0.16] },
+//     {position: [-0.25, -0.40, 0.16] },
+// ]
+
+
+
+// arrow.forEach((arrow, idx) => {
+//     const arrowContainer = new Object3D();
+//     const shape = new Shape();
+//     shape.moveTo(0, 1);   // top vertex
+//     shape.lineTo(-1, -1); // bottom left
+//     shape.lineTo(1, -1);  // bottom right
+//     shape.lineTo(0, 1);   // close path
+//     const triangleGeometry = new ShapeGeometry(shape);
+//     const triangleMaterial = new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, side: DoubleSide });
+//     const triangleMesh = new Mesh(triangleGeometry, triangleMaterial);
+//     triangleMesh.scale.set(0.025,0.025,0.025);
+
+//     arrowContainer.add(triangleMesh);
+//     loadGroup.add(arrowContainer);
+// });
+
 
 // ─── Markers ─────────────────────────────────────────────────────────────────
 const markerData = [
@@ -278,7 +347,7 @@ function onCanvasClick(event) {
 
                 // Rotate piece counter-clockwise (or fast drop if you prefer)
                 const ccwRotation = (currentRotation + 270) % 360;
-                if (isValidRotation(currentShapeId, currentOffsetX, ccwRotation)) {
+                if (isValidRotation(currentShapeId, newOffsetX, ccwRotation)) {
                     console.log("Counter-clockwise rotation is safe - applying it");
                     tetrisMaterial.uniforms.u_rotation.value = ccwRotation;
                     checkPieceAtEdge();
@@ -346,7 +415,7 @@ function onCanvasClick(event) {
                                         child.material.type === 'MeshPhysicalMaterial'
                                     ) {
                                         child.material.emissive.set(0xF76F65);
-                                        child.material.emissiveIntensity = 100; // Try a very high value
+                                        child.material.emissiveIntensity = 40; // Try a very high value
                                     }
                                 }
                             } 
@@ -381,67 +450,6 @@ function onCanvasClick(event) {
     console.clear();
     console.log('Clicked marker data:', markerData[idx]);
     
-    // Skip if gameboy is turned off or game is over
-    // if (gameboy_turned_off || getGameState().isGameOver) return;
-    
-    // // Get current game state for manipulation
-    // const currentShapeId = tetrisMaterial.uniforms.u_shapeId.value;
-    // const currentOffsetX = tetrisMaterial.uniforms.u_offsetX.value;
-    // const currentRotation = tetrisMaterial.uniforms.u_rotation.value;
-    // console.log()
-    // if (markerData[idx].mesh) {
-    //     console.log(markerData[idx].animation);
-    //     playButtonAnimation(markerData[idx].animation);
-        
-    //     // Add Tetris game logic based on which marker was clicked
-    //     switch (markerData[idx].mesh) {
-    //         case 'up_arrow':
-    //             // Rotate piece clockwise (same as UP arrow key)
-    //             const newRotation = (currentRotation + 90) % 360;
-    //             if (isValidRotation(currentShapeId, currentOffsetX, newRotation)) {
-    //                 console.log("Rotation is safe - applying it");
-    //                 tetrisMaterial.uniforms.u_rotation.value = newRotation;
-    //                 checkPieceAtEdge();
-    //             } else {
-    //                 console.log("Rotation blocked - would cause collision");
-    //             }
-    //             break;
-                
-    //         case 'down_arrow':
-    //             // Rotate piece counter-clockwise (or fast drop if you prefer)
-    //             const ccwRotation = (currentRotation + 270) % 360;
-    //             if (isValidRotation(currentShapeId, currentOffsetX, ccwRotation)) {
-    //                 console.log("Counter-clockwise rotation is safe - applying it");
-    //                 tetrisMaterial.uniforms.u_rotation.value = ccwRotation;
-    //                 checkPieceAtEdge();
-    //             }
-    //             break;
-                
-    //         case 'arrow_left':
-    //             // Move piece left (same as LEFT arrow key)
-    //             const newOffsetXLeft = currentOffsetX - 1;
-    //             if (isValidMove(currentShapeId, newOffsetXLeft, currentRotation)) {
-    //                 console.log("Moving left");
-    //                 tetrisMaterial.uniforms.u_offsetX.value = newOffsetXLeft;
-    //                 checkPieceAtEdge();
-    //             } else {
-    //                 console.log("Can't move left - blocked");
-    //             }
-    //             break;
-                
-    //         case 'arrow_right':
-    //             // Move piece right (same as RIGHT arrow key)
-    //             const newOffsetXRight = currentOffsetX + 1;
-    //             if (isValidMove(currentShapeId, newOffsetXRight, currentRotation)) {
-    //                 console.log("Moving right");
-    //                 tetrisMaterial.uniforms.u_offsetX.value = newOffsetXRight;
-    //                 checkPieceAtEdge();
-    //             } else {
-    //                 console.log("Can't move right - blocked");
-    //             }
-    //             break;
-    //     }
-    // }
 }
 
 
@@ -455,11 +463,18 @@ function render() {
     const t = performance.now() / 1000;
     if (mixer) mixer.update(0.016);
 
+    // Call autoRotate function
+    autoRotate.autoRotate();
+
+    // Add this animation for the triangle
+    if (arrowContainer && arrowBaseY !== null) {
+        arrowContainer.position.y = arrowBaseY + Math.sin(t * Math.PI * 2 / 0.9) * 0.01;
+        arrowContainer.rotation.y = Math.sin(t * Math.PI * 2 / 1.5) * Math.PI * 0.25; // 180° rotation
+    }
 
     if (dummyswitch === true) {
         tetrisMaterial.uniforms.u_time.value = t;
         gameOverMaterial.uniforms.u_time.value = t;
-
 
         if (getGameState().isGameOver) {
             endOfGame(t);
@@ -473,9 +488,23 @@ function render() {
         statsPanel.statsObject.end();
     }
     scrollGroup.rotation.y = window.scrollY * 0.001;
-    
-    composer.render();
 
+    composer.render();
 }
 
 render();
+
+function createTextSprite(message) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    context.font = '32px Arial';
+    context.fillStyle = '#ffff00';
+    context.fillText(message, 20, 24);
+
+    const texture = new CanvasTexture(canvas);
+    const material = new SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new Sprite(material);
+    sprite.scale.set(0.3, 0.3, 1); // Adjust size as needed
+    return sprite;
+}
+

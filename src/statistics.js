@@ -1,6 +1,6 @@
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import Stats from 'three/addons/libs/stats.module.js';
-import { scene } from './tetris-game.js';
+import { scene, loadGroup } from './tetris-game.js';
 
 const wireframe = {
     enabled: false,
@@ -16,6 +16,17 @@ const wireframe = {
         });
     },
 };
+
+export const autoRotate = {
+    enabled: false,
+    autoRotate: function() {
+                if (autoRotate.enabled) { // Use autoRotate.enabled explicitly
+                    // obj.rotation.y += 0.01; // Adjust speed as needed
+                    loadGroup.rotation.y += 0.01; // Rotate the scrollGroup
+                    console.log("Rotating");
+                }
+    },
+}
 
 
 export class ControlPanel {
@@ -44,6 +55,13 @@ export class ControlPanel {
         const imagePanel = document.createElement('div');
         imagePanel.className = 'image-stack-panel';
         folder.$children.appendChild(imgPanel);
+
+        this.gui.add(autoRotate, 'enabled')
+            .name('Auto rotate')
+            .onChange(value => {
+                autoRotate.enabled = value;
+            });
+        
 
 
 

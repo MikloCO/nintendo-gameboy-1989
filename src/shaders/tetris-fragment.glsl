@@ -10,11 +10,10 @@ uniform sampler2D u_gridTexture;
 uniform int u_rotation;
 
 varying vec2 vUv;
-
-vec3 _0x0=vec3(.165,.271,.231);
-vec3 _0x1=vec3(.212,.365,.282);
-vec3 _0x2=vec3(.341,.486,.267);
-vec3 _0x3=vec3(.498,.525,.059);
+vec3 _0x0=vec3(.443,.443,.035);
+vec3 _0x1=vec3(.180,.298,.251);
+vec3 _0x2=vec3(.341,.325,.020);
+vec3 _0x3=vec3(.286,.404,.263);
 
 // Brick texture for side borders
 vec3 bricktexture(vec2 uv){
