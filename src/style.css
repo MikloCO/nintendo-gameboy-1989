@@ -168,3 +168,39 @@ section.content p {
 .lil-gui .children .empty {
     display: none !important;
 }
+
+
+#keywords-panel {
+    position: absolute;
+    left: 30px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 20px;
+    background-color: rgba(48, 67, 38, 0.8);
+    /* Semi-transparent dark green */
+    border: 3px solid #5a6b4a;
+    color: #c4d4a4;
+    /* Light green text */
+    font-family: 'Press Start 2P', monospace;
+    /* A good retro font */
+    width: 500px;
+    z-index: 100;
+    /* Ensure it's on top of the canvas */
+    pointer-events: none;
+    /* Allows clicks to pass through to the canvas */
+}
+
+#keywords-panel h3 {
+    margin-top: 0;
+    text-align: center;
+    color: #e0e0d0;
+}
+
+#keywords-panel ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+#keywords-panel li {
+    margin-bottom: 10px;
+}
