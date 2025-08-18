@@ -2,8 +2,8 @@
 export const ITermino = [
     0, 9, 0, 0,
     0, 9, 0, 0,
-    0, 9, 9, 0,
-    0, 0, 0, 0
+    0, 9, 0, 0,
+    0, 9, 0, 0
 ];
 export const OTermino = [
     0, 0, 0, 0,

@@ -18,10 +18,10 @@ bool isInTextArea(vec2 uv, vec2 textPos, vec2 textSize) {
 }
 
 
-vec3 _0x0=vec3(.165,.271,.231);
-vec3 _0x1=vec3(.212,.365,.282);
-vec3 _0x2=vec3(.341,.486,.267);
-vec3 _0x3=vec3(.498,.525,.059);
+vec3 _0x0=vec3(.22,.24,.09);
+vec3 _0x1=vec3(.2314,.2627,.0941);
+vec3 _0x2=vec3(.1882,.2627,.149);
+vec3 _0x3=vec3(.2941,.3686,.1882);
 
 
 struct TextAtlasPosition {

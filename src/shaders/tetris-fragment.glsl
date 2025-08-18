@@ -10,10 +10,11 @@ uniform sampler2D u_gridTexture;
 uniform int u_rotation;
 
 varying vec2 vUv;
-vec3 _0x0=vec3(.443,.443,.035);
-vec3 _0x1=vec3(.180,.298,.251);
-vec3 _0x2=vec3(.341,.325,.020);
-vec3 _0x3=vec3(.286,.404,.263);
+
+vec3 _0x0=vec3(.22,.24,.09);// darkest (text, borders)
+vec3 _0x1=vec3(0.2314, 0.2627, 0.0941);// medium (grid, shadow)
+vec3 _0x2=vec3(0.1882, 0.2627, 0.149);// light (block fill, panels)
+vec3 _0x3=vec3(0.2941, 0.3686, 0.1882);
 
 // Brick texture for side borders
 vec3 bricktexture(vec2 uv){
@@ -26,7 +27,7 @@ vec3 bricktexture(vec2 uv){
     float x=mod(uv.x+offset,brickWidth);
     float y=mod(uv.y,brickHeight);
     
-    vec3 brickColor=_0x2;
+    vec3 brickColor=_0x3;
     vec3 mortarColor=_0x1;
     
     float edge=step(mortar,x)*step(mortar,brickWidth-x)*
@@ -37,8 +38,8 @@ vec3 bricktexture(vec2 uv){
 const int ITermino[16]=int[16](
     0,1,0,0,
     0,1,0,0,
-    0,1,1,0,
-    0,0,0,0
+    0,1,0,0,
+    0,1,0,0
 );
 const int OTermino[16]=int[16](
     0,0,0,0,
@@ -112,57 +113,71 @@ void main(void){
         int gx = int(gridUv.x);
         int gy = int(gridUv.y);
         
-        // Check for static blocks directly using the red channel
         bool isStatic = gridVal.r > 0.0;
-        int staticShapeId = int(gridVal.g / 36.0) - 1;   // G: shapeId (0-6)
+        int staticShapeId = int(gridVal.g / 36.0) - 1;
         
         int fx = gx-int(u_offsetX);
         int fy = gy-int(rawFall);
         
-        // Simple rotation matching JS
         int rx = fx;
         int ry = fy;
         int rot = int(mod(float(u_rotation) / 90.0, 4.0));
 
-        // Clockwise rotation in GLSL (opposite to JS)
-        if(rot == 1) { // 90° clockwise
+        if(rot == 1) {
             rx = fy;
             ry = 3 - fx;
-        } else if(rot == 2) { // 180°
+        } else if(rot == 2) {
             rx = 3 - fx;
             ry = 3 - fy;
-        } else if(rot == 3) { // 270° clockwise
+        } else if(rot == 3) {
             rx = 3 - fy;
             ry = fx;
         }
-        int irx = rx;
-        int iry = ry;
         
-        bool isFalling=false;
-        vec3 baseColor;
-        
-        if(rx>=0 && rx<4 && ry>=0 && ry<4 && 
-           getShapeValueById(int(u_shapeId), rx, ry)==1) {
-            isFalling = true;
-            baseColor = (int(u_shapeId)==0) ? _0x1 : _0x2;
-            }
-            
-            else if(isStatic){
-                // Static blocks are always visible with _0x2 color
-                baseColor = _0x2;
-                }
-                
-                if(isFalling||isStatic){
-                    vec2 cellUv=fract(uv*gridSize);
-                    float edge=step(.08,cellUv.x)*step(cellUv.x,.92)*
-                    step(.08,cellUv.y)*step(cellUv.y,.92);
-                    vec3 borderColor=baseColor*.5;
-                    color=mix(borderColor,baseColor,edge);
-                }else{
-                    color=_0x3;
-                }
-            }
-            
-            gl_FragColor=vec4(color,opacity);
+        bool isBlock = false;
+        int shapeId;
+
+        // Check if the pixel is part of the currently falling block
+        if(rx>=0 && rx<4 && ry>=0 && ry<4 && getShapeValueById(int(u_shapeId), rx, ry)==1) {
+            isBlock = true;
+            shapeId = int(u_shapeId);
+        } 
+        // Otherwise, check if it's part of a static block on the grid
+        else if(isStatic) {
+            isBlock = true;
+            shapeId = staticShapeId;
         }
-        
+
+        if(isBlock){
+            vec3 baseColor = _0x0; // The dark outline color
+            vec3 innerColor = _0x2; // The light fill color for the pattern
+            vec2 cellUv = fract(uv*gridSize);
+
+            // if(shapeId == 0) {
+
+                // 1. Draw the base block with its outer border
+                float edge=step(.08,cellUv.x)*step(cellUv.x,.92)*
+                        step(.08,cellUv.y)*step(cellUv.y,.92);
+                vec3 borderColor=baseColor*.5;
+                color=mix(borderColor,baseColor,edge);
+
+                // 2. Draw the "block-in-block" pattern on top for ALL shapes
+                // This now works for both falling and static blocks.
+                
+                float outer = step(0.18,cellUv.x)*step(cellUv.x,0.82)*
+                            step(0.18,cellUv.y)*step(cellUv.y,0.82);
+                color = mix(color, borderColor, outer);
+
+                float inner = step(0.32,cellUv.x)*step(cellUv.x,0.68)*
+                            step(0.32,cellUv.y)*step(cellUv.y,0.68);
+                // FIX: Use the light innerColor, not the dark borderColor
+                color = mix(color, innerColor, inner);
+            // }
+
+        }else{
+            color=_0x3;
+        }
+    }
+    
+    gl_FragColor=vec4(color,opacity);
+}

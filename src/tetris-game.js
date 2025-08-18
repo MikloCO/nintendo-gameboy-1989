@@ -25,7 +25,8 @@ import {
     CircleGeometry,
     DoubleSide,
     Sprite,
-    SpriteMaterial
+    SpriteMaterial,
+    ExtrudeGeometry
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -105,6 +106,7 @@ const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 const gltfLoader = new GLTFLoader();
 gltfLoader.setDRACOLoader(dracoLoader);
+let textSprite = null;
 
 // Animation setup
 let mixer, animations = {}, currentAnimation;
@@ -125,11 +127,18 @@ gltfLoader.load("/models/gameboy.glb", (gltf) => {
     shape.lineTo(1, 1);     // top right (base)
     shape.lineTo(0, -1);
 
-    const triangleGeometry = new ShapeGeometry(shape);
-    const triangleMaterial = new MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.5, side: DoubleSide });
+    // Extrude settings
+    const extrudeSettings = {
+        depth: 0.25, // Thickness of the triangle
+        bevelEnabled: false // Disable bevel for sharp edges
+    };
+
+    // Create the extruded geometry
+    const triangleGeometry = new ExtrudeGeometry(shape, extrudeSettings);
+
+    const triangleMaterial = new MeshBasicMaterial({ color: 0xffff00, transparent: false, opacity: 1., side: DoubleSide });
     const triangleMesh = new Mesh(triangleGeometry, triangleMaterial);
     triangleMesh.scale.set(0.05, 0.05, 0.05);
-
     // Create a container for the triangle
     arrowContainer = new Object3D(); // Remove 'const' to make it global
     arrowContainer.add(triangleMesh);
@@ -142,7 +151,7 @@ gltfLoader.load("/models/gameboy.glb", (gltf) => {
     loadGroup.add(arrowContainer);
 
     // --- Add text sprite above the triangle ---
-    const textSprite = createTextSprite('Toggle to play!');
+    textSprite = createTextSprite('Toggle to play!');
     textSprite.position.set(center.x - .3, triangleY + 0.002, center.z); // adjust Y offset as needed
     loadGroup.add(textSprite);
 
@@ -218,29 +227,6 @@ composer.addPass(new RenderPass(scene, camera));
 composer.addPass(new OutputPass());
 
 
-// const arrow = [
-//     {position: [-0.25, -1.20, 0.16] },
-//     {position: [-0.25, -0.30, 0.16] },
-//     {position: [-0.25, -0.40, 0.16] },
-// ]
-
-
-
-// arrow.forEach((arrow, idx) => {
-//     const arrowContainer = new Object3D();
-//     const shape = new Shape();
-//     shape.moveTo(0, 1);   // top vertex
-//     shape.lineTo(-1, -1); // bottom left
-//     shape.lineTo(1, -1);  // bottom right
-//     shape.lineTo(0, 1);   // close path
-//     const triangleGeometry = new ShapeGeometry(shape);
-//     const triangleMaterial = new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, side: DoubleSide });
-//     const triangleMesh = new Mesh(triangleGeometry, triangleMaterial);
-//     triangleMesh.scale.set(0.025,0.025,0.025);
-
-//     arrowContainer.add(triangleMesh);
-//     loadGroup.add(arrowContainer);
-// });
 
 
 // ─── Markers ─────────────────────────────────────────────────────────────────
@@ -256,11 +242,11 @@ markerData.forEach((marker, idx) => {
 
     const torus = new Mesh(
         new TorusGeometry(0.06, 0.01, 2, 100),
-        new MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.01 })
+        new MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.0 })
     );
     const circle = new Mesh(
         new CircleGeometry(0.05, 32),
-        new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1 })
+        new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0. })
     );
 
     [torus, circle].forEach(mesh => {
@@ -420,6 +406,13 @@ function onCanvasClick(event) {
                                 }
                             } 
                     });
+                    // REMOVE THE TRIANGLE AND TEXT
+                    if (arrowContainer && arrowContainer.parent) {
+                        arrowContainer.parent.remove(arrowContainer);
+                    }
+                    if (textSprite && textSprite.parent) {
+                        textSprite.parent.remove(textSprite);
+                    }
                 }
                 gameboy_turned_off = !gameboy_turned_off;
                 break;
